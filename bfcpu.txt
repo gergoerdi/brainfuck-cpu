@@ -1,0 +1,72 @@
+
+TODO:
+-----
+- I/O; should be blocking
+
+
+MAIN UNIT
+=========
+
+Interfaces: 
+	RAM 16x8 bit addressable by DP, SP
+		Input: 16 bit address
+		Output: 8 bit opcode
+		
+	ROM 16x8 bit addressable by PC (always hooked on)
+		Input: 16 bit address 
+
+Registers:	
+	PC		16		Program Counter
+	DP		16		Data Pointer
+	SP		16 		Stack Pointer
+	BUF		16		Result Buffer
+	
+	*PC		8		ROM at PC
+	*DP		8		RAM at DP
+	*SP		8		RAM at SP
+	
+	x		-		no register selected		
+	
+16 bit Inc/Dec ALU
+	Operations: INC, DEC, MOV (no change), CMP (compare to zero)
+
+	zero cycle operation
+	
+	Operands:
+		Input select  = x|PC|DP|SP|*DP|*SP
+		Output select = x|PC|DP|SP|*DP|*SP
+
+
+STATEMENT DECODER
+=================
+
+stmt_start
+	[switch on opcode]	; 0 cycles
+
+stmt_+
+	INC *DP, *DP		; 2 cycles
+	[goto stmt_wrapup]
+
+stmt_-
+	DEC *DP, *DP		; 2 cycles
+	[goto stmt_wrapup]
+
+stmt_>>
+	INC DP, DP			; 2 cycles
+	[goto stmt_wrapup]
+
+stmt_<<
+	DEC DP, DP			; 2 cycles
+	[goto stmt_wrapup]
+
+stmt_.	; output
+	; TODO
+	[goto stmt_wrapup]
+
+stmt_,	; input
+	; TODO
+	[goto stmt_wrapup]
+
+
+stmt_wrapup
+	INC PC, PC			; 2 cycles
