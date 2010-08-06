@@ -1,72 +1,171 @@
+=====================================
+***		Brainfuck-CPU project	  ***
+=====================================
 
-TODO:
------
-- I/O; should be blocking
-
-
-MAIN UNIT
-=========
-
-Interfaces: 
+Memory:
 	RAM 16x8 bit addressable by DP, SP
-		Input: 16 bit address
-		Output: 8 bit opcode
+		Input:  16 bit address
+		Output:  8 bit opcode
 		
-	ROM 16x8 bit addressable by PC (always hooked on)
-		Input: 16 bit address 
+	ROM 16x8 bit addressed by PC (always hooked on)
+		Input:  16 bit address, WE (write enable)
+		In/out:  8 bit data
+		
 
-Registers:	
+Registers:
 	PC		16		Program Counter
 	DP		16		Data Pointer
 	SP		16 		Stack Pointer
-	BUF		16		Result Buffer
-	
+	BUF		16		Result Buffer (ALU internal)
+
 	*PC		8		ROM at PC
 	*DP		8		RAM at DP
 	*SP		8		RAM at SP
-	
-	x		-		no register selected		
-	
-16 bit Inc/Dec ALU
-	Operations: INC, DEC, MOV (no change), CMP (compare to zero)
+		
+	x		-		no register selected
 
+Operations (ALU):
+	INC, DEC, MOV (no change)
+	SWP - swap
+	LOW - disable high write on output
+	
+	Output flags: NZ if result nonzero
+	
 	zero cycle operation
 	
-	Operands:
-		Input select  = x|PC|DP|SP|*DP|*SP
-		Output select = x|PC|DP|SP|*DP|*SP
+	
+	INC|DEC|MOV [src] [dst]
+	
+	src = x|PC|DP|SP|*DP|*SP
+	dst = x|PC|DP|SP|*DP|*SP
+	
+	<op> <reg> is equivalent to <op> <reg> <reg>
+	
+	Each operation takes 2 cycles:
+	0) load result to BUF
+	1) send BUF to dst
+	
+	
+Opcode
+	bit 7 6 5 4 3 2 1 0 
+		X H R R R D D D
+		
+		X - not assigned
+		H - Halt?
+		R - OperatoR
+		D - OperanD
+		
+		
 
+COMMON STATEMENT SETUP
+======================
 
-STATEMENT DECODER
-=================
+Invariants at the beginnig of processing:
+	PC is loaded properly
+	*PC contains the stmt
 
 stmt_start
-	[switch on opcode]	; 0 cycles
+	[switch on stmt]	; 0 cycles, goes to stmt_<stmt>
+	
+stmt_wrapup
+	INC PC, PC			; 2 cycles, go to next statement
+
+BASIC STATEMENTS
+================
 
 stmt_+
-	INC *DP, *DP		; 2 cycles
+	INC *DP				; 2 cycles
 	[goto stmt_wrapup]
 
 stmt_-
-	DEC *DP, *DP		; 2 cycles
+	DEC *DP				; 2 cycles
 	[goto stmt_wrapup]
 
 stmt_>>
-	INC DP, DP			; 2 cycles
+	INC DP				; 2 cycles
 	[goto stmt_wrapup]
 
 stmt_<<
-	DEC DP, DP			; 2 cycles
+	DEC DP				; 2 cycles
 	[goto stmt_wrapup]
+	
+	
+INPUT/OUTPUT
+============
+Notes:
+- BUF wired out for I/O
+- waiting in Halted state
+- external party gives a signal when ready, that will take us out from HALT
 
-stmt_.	; output
-	; TODO
-	[goto stmt_wrapup]
-
-stmt_,	; input
-	; TODO
-	[goto stmt_wrapup]
+stmt_.		; output
+	MOV *DP, OUT ?????
+		
+stmt_,		; input
+	;TODO
 
 
-stmt_wrapup
-	INC PC, PC			; 2 cycles
+LOOPS
+=====
+
+Design notes:
+- the loop start address (address of '[') is stored on the stack (*SP)
+- condition for zero is only tested at the beginning of loop, that is 
+  at the end of the loop we first POP, go to the beginning, then test
+  (FIXME: at some point we might want to optimize this)
+- If test fails, we step through until we find the matching ']' in a so 
+  called 'skip' mode, where we don't evaluate statements, only counting 
+  loop markers.
+  
+Stack handling
+--------------
+- Note that we need to store 16 bits on the stack, which has 8 bit data 
+  words.
+- stack will grow to lower addresses starting from end of memory (FFFF)
+- note in case of 32K memory, we'll just wire the lower 15 address bits,
+  highest address will actually become 7FFF; our scheme below works 
+  regardless
+
+push
+	DEC SP				; Assuming SP is initialized to 0, the first push
+						; will nicely point to FFFF as desired
+	MOV PC, *SP			; write low byte
+	DEC SP		
+	SWP PC, *SP			; write high byte
+	
+pop						; inverse of push
+	SWP *SP, PC			; read high byte
+	INC SP				; NOTE: destroys BUF contents!
+	MOV PC				; NOTE: (re)store high byte in BUF
+	LOW *SP, PC			; read low byte
+	
+
+Loop statements
+---------------
+
+; TODO
+stmt_[
+stmt_]
+
+====================
+IMPLEMENTATION NOTES
+====================
+
+ALU - Comparator (16 bit, for fZero)
+	74x85	4-bit magnitude comparator
+	74x688	8-bit identity comparator
+	74x521	8-bit identity comparator
+ALU - Full adder (16 bit)
+CTL - Flip-flop (1 bit)
+CTL - Counter (2? bits)
+CTL - XNOR (2 bit)
+CTL - NOT (1 bit)
+CTL - Muxer (4 by 1 bit)
+CTL - Stmt counter (32 bit) [optional]
+CPU - Register (3 x 16 bit)
+CPU - Demux (1 by 2 bits)
+CPU - AND (2 bits)
+CPU - NOT (1 bits)
+CPU - Controlled Buffer (2 x 8 bits)
+
+ROM - 32K x 8 bit asynch, paralell
+RAM - 32K x 8 bit asynch, paralell
